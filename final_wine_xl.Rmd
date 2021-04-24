@@ -1,0 +1,43 @@
+---
+title: "Final"
+author: "Team 10"
+date: "4/24/2021"
+output:
+  pdf_document:
+    latex_engine: xelatex
+---
+
+## Introduction
+
+```{r, echo=FALSE,  results='hide', message=FALSE, warning=FALSE}
+library(tidyverse)
+library(dplyr)
+library(caret)
+library(mgcv)
+library(ggplot2)
+library(glmnet)
+library(pROC)
+library(AppliedPredictiveModeling)
+library(MASS)
+
+
+# Read in data
+wine <- read.csv("./winequality-red.csv", stringsAsFactors = FALSE) %>% 
+  janitor::clean_names() %>% 
+  na.omit() %>% 
+  mutate(qual = case_when(quality > 5 ~ "good", quality <= 5 ~ "poor")) %>% 
+  mutate(qual = as.factor(qual)) %>% 
+  dplyr::select(-quality)
+
+theme1 <- transparentTheme(trans = .4)
+trellis.par.set(theme1)
+featurePlot(x = wine[, 1:11], 
+            y = wine$qual,
+            scales = list(x = list(relation = "free"),
+                          y = list(relation = "free")),
+            plot = "density", pch = "|",
+            auto.key = list(columns = 2))
+
+
+```
+
