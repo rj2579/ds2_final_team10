@@ -1,10 +1,8 @@
 ---
 title: "Final"
 author: "Team 10"
-date: "4/24/2021"
-output:
-  pdf_document:
-    latex_engine: xelatex
+date: "5/2/2021"
+output: pdf_document
 ---
 
 ## Introduction
@@ -98,7 +96,7 @@ plot(smooth(roc.glm), col = 4, add = TRUE)
 ROC = 0.818
 
 
-Penalized logistic regression
+### Penalized logistic regression
 ```{r}
 glmnGrid <- expand.grid(.alpha = seq(0, 1, length = 6),
                         .lambda = exp(seq(-8, -2, length = 20)))
@@ -133,7 +131,7 @@ plot(smooth(roc.glm), col = 4, add = TRUE)
 ROC = 0.818
 
 
-GAM
+### GAM
 ```{r}
 set.seed(1)
 model.gam <- train(x = trainData %>% dplyr::select(-qual),
@@ -165,7 +163,7 @@ plot(smooth(roc.gam), col = 4, add = TRUE)
 ```
 ROC = 0.829
 
-MARS
+### MARS
 ```{r}
 set.seed(1)
 model.mars <- train(x = trainData %>% dplyr::select(-qual),
@@ -200,7 +198,7 @@ plot(smooth(roc.mars), col = 4, add = TRUE)
 ```
 ROC = 0.823
 
-LDA
+### LDA
 ```{r}
 set.seed(1)
 model.lda <- train(x = trainData %>% dplyr::select(-qual),
@@ -226,7 +224,7 @@ plot(smooth(roc.lda), col = 4, add = TRUE)
 ```
 ROC = 0.819
 
-QDA
+### QDA
 ```{r}
 set.seed(1)
 model.qda <- train(x = trainData %>% dplyr::select(-qual),
@@ -252,7 +250,7 @@ plot(smooth(roc.lda), col = 4, add = TRUE)
 ```
 ROC = 0.784
 
-KNN
+### KNN
 ```{r}
 kGrid <- expand.grid(k = seq(from = 1, to = 40, by = 1))
 
@@ -286,7 +284,8 @@ plot(smooth(roc.knn), col = 4, add = TRUE)
 ```
 ROC = 0.672
 
-Classification Tree
+
+## Classification Tree
 
 ```{r}
 
@@ -304,11 +303,7 @@ rpart.plot(class.tree$finalModel)
 ## Calculate the test error
 rpart.pred = predict(class.tree, newdata = testData, type = "raw")
 
-<<<<<<< HEAD
-error <- mean(testData$qual != rpart.pred)
-=======
-error <- mean(testData$Purchase != rpart.pred)
->>>>>>> 322f92c69b353bd2cdd27c0ae42691709c132439
+error <- mean(test_data$Purchase != rpart.pred)
 
 # Building confusion matrix
 test.pred.prob8 <- predict(class.tree, newdata = testData,
@@ -327,9 +322,163 @@ plot(smooth(roc.ctree), col = 4, add = TRUE)
 ```
 ROC = 0.811
 
-???????????????????????????do we need to include variable importance? Boosting; random forest in caret?
 
-SVM with linear kernal
+### Perform random forest and report the variable importance
+```{r}
+ctrl <- trainControl(method = "cv", number = 10,
+                     classProbs = TRUE, 
+                     summaryFunction = twoClassSummary)
+
+rf.grid <- expand.grid(mtry = 1:10,
+                       splitrule = "gini",
+                       min.node.size = seq(from = 1, to = 12, by = 2))
+set.seed(2)
+rf.fit <- train(qual ~ . , 
+                trainData, 
+                method = "ranger",
+                tuneGrid = rf.grid,
+                metric = "ROC",
+                trControl = ctrl)
+
+ggplot(rf.fit, highlight = TRUE)
+rf.fit$bestTune
+
+
+# compute importance
+set.seed(2)
+random_forest <- ranger(qual ~ . , 
+                        trainData, 
+                        mtry = 9,
+                        splitrule = "gini",
+                        min.node.size = 11,
+                        importance = "permutation",
+                        scale.permutation.importance = TRUE) 
+
+barplot(sort(ranger::importance(random_forest), decreasing = FALSE), 
+        las = 2, horiz = TRUE, cex.names = 0.7,
+        col = colorRampPalette(colors = c("cyan","blue"))(8))
+
+
+# compute the test error rate 
+rf.pred <- predict(rf.fit, newdata = testData)
+mean(test$purchase != rf.pred) 
+```
+"loyal_ch" is most important variable, and "store7" is the least important variable. The test error rate is 0.204. 
+
+
+### Perform boosting and report the variable importance
+```{r}
+ctrl <- trainControl(method = "cv", number = 10,
+                     classProbs = TRUE, 
+                     summaryFunction = twoClassSummary)
+
+gbmA.grid <- expand.grid(n.trees = c(2000,3000,4000),
+                         interaction.depth = 3:10,
+                         shrinkage = c(0.001,0.003,0.005),
+                         n.minobsinnode = 1)
+set.seed(2)
+gbmA.fit <- train(qual ~ . , 
+                  trainData, 
+                  tuneGrid = gbmA.grid,
+                  trControl = ctrl,
+                  method = "gbm",
+                  distribution = "adaboost",
+                  metric = "ROC",
+                  verbose = FALSE)
+
+ggplot(gbmA.fit, highlight = TRUE)
+gbmA.fit$bestTune
+
+# compute importance
+summary(gbmA.fit$finalModel, las = 2, cBars = 19, cex.names = 0.6)
+
+# compute the test error rate 
+gbmA.pred <- predict(gbmA.fit, newdata = testData)
+mean(test$purchase != gbmA.pred) 
+```
+"loyal_ch" is most important variable, and "store7Yes" is the least important variable. The test error rate is 0.207. 
+
+## Random forest
+```{r}
+set.seed(1)
+rf.grid <- expand.grid(mtry = 1:4, splitrule = "gini",
+                       min.node.size = seq(from = 2, to = 40, by = 2))
+
+rf.fit <- train(qual ~ . ,
+                test,
+                method = "ranger",
+                tuneGrid = rf.grid,
+                metric = "ROC",
+                trControl = ctrl)
+ggplot(rf.fit, highlight = TRUE)
+
+rf.pred <- predict(rf.fit, newdata = test,
+                   type = "prob")[,1]
+
+roc.rf <- roc(test$qual, rf.pred)
+plot(roc.rf, legacy.axes = TRUE)
+modelName <- "rf"
+legend("bottomright", legend = paste0(modelName, ": ", round(roc.rf$auc[1],3)),
+       col = 1:3, lwd = 2)
+```
+AUC = 0.967
+
+## Boosting
+```{r}
+set.seed(1)
+gbmA.grid <- expand.grid(n.trees = c(2000,3000,4000),
+                         interaction.depth = 1:6,
+                         shrinkage = c(0.001,0.003,0.005),
+                         n.minobsinnode = 1)
+
+gbmA.fit <- train(qual ~ . ,
+                  test,
+                  tuneGrid = gbmA.grid,
+                  trControl = ctrl,
+                  method = "gbm",
+                  distribution = "adaboost",
+                  metric = "ROC",
+                  verbose = FALSE)
+
+ggplot(gbmA.fit, highlight = TRUE)
+gbmA.fit$bestTune
+
+gbmA.pred <- predict(gbmA.fit, newdata = test,
+                     type = "prob")[,1]
+
+roc.gbmA <- roc(test$qual, gbmA.pred)
+plot(roc.gbmA, legacy.axes = TRUE)
+modelName <- "gbmA"
+legend("bottomright", legend = paste0(modelName, ": ", round(roc.gbmA$auc[1],3)),
+       col = 1:3, lwd = 2)
+```
+AUC = 0.862
+
+## SVM with linear kernal
+```{r}
+set.seed(1)
+
+svml.fit <- train(qual ~ . ,
+                  data = train,
+                  method = "svmLinear2",
+                  tuneGrid = data.frame(cost = exp(seq(-2,5,len = 20))),
+                  trControl = ctrl)
+plot(svml.fit, highlight = TRUE, xTrans = log)
+
+svml.fit$bestTune
+
+svml.pred <- predict(svml.fit, newdata = test,
+                     type = "prob")[,1]
+
+roc.svml <- roc(test$qual, svml.pred)
+plot(roc.svml, legacy.axes = TRUE)
+modelName <- "svml"
+legend("bottomright", legend = paste0(modelName, ": ", round(roc.svml$auc[1],3)),
+       col = 1:3, lwd = 2)
+```
+
+
+## SVM with linear kernal
 ```{r}
 set.seed(1)
 linear.tune <- tune.svm(qual ~ . ,
