@@ -398,63 +398,8 @@ mean(test$purchase != gbmA.pred)
 ```
 "loyal_ch" is most important variable, and "store7Yes" is the least important variable. The test error rate is 0.207. 
 
-## Random forest
-```{r}
-set.seed(1)
-rf.grid <- expand.grid(mtry = 1:4, splitrule = "gini",
-                       min.node.size = seq(from = 2, to = 40, by = 2))
 
-rf.fit <- train(qual ~ . ,
-                test,
-                method = "ranger",
-                tuneGrid = rf.grid,
-                metric = "ROC",
-                trControl = ctrl)
-ggplot(rf.fit, highlight = TRUE)
-
-rf.pred <- predict(rf.fit, newdata = test,
-                   type = "prob")[,1]
-
-roc.rf <- roc(test$qual, rf.pred)
-plot(roc.rf, legacy.axes = TRUE)
-modelName <- "rf"
-legend("bottomright", legend = paste0(modelName, ": ", round(roc.rf$auc[1],3)),
-       col = 1:3, lwd = 2)
-```
-AUC = 0.967
-
-## Boosting
-```{r}
-set.seed(1)
-gbmA.grid <- expand.grid(n.trees = c(2000,3000,4000),
-                         interaction.depth = 1:6,
-                         shrinkage = c(0.001,0.003,0.005),
-                         n.minobsinnode = 1)
-
-gbmA.fit <- train(qual ~ . ,
-                  test,
-                  tuneGrid = gbmA.grid,
-                  trControl = ctrl,
-                  method = "gbm",
-                  distribution = "adaboost",
-                  metric = "ROC",
-                  verbose = FALSE)
-
-ggplot(gbmA.fit, highlight = TRUE)
-gbmA.fit$bestTune
-
-gbmA.pred <- predict(gbmA.fit, newdata = test,
-                     type = "prob")[,1]
-
-roc.gbmA <- roc(test$qual, gbmA.pred)
-plot(roc.gbmA, legacy.axes = TRUE)
-modelName <- "gbmA"
-legend("bottomright", legend = paste0(modelName, ": ", round(roc.gbmA$auc[1],3)),
-       col = 1:3, lwd = 2)
-```
-AUC = 0.862
-
-## SVM with linear kernal
+## SVM with linear kernal (caret)
 ```{r}
 set.seed(1)
 
@@ -474,6 +419,30 @@ roc.svml <- roc(test$qual, svml.pred)
 plot(roc.svml, legacy.axes = TRUE)
 modelName <- "svml"
 legend("bottomright", legend = paste0(modelName, ": ", round(roc.svml$auc[1],3)),
+       col = 1:3, lwd = 2)
+```
+
+## SVM with radial kernal (caret)
+```{r}
+set.seed(1)
+
+svmr.fit <- train(qual ~ .,
+                  data = train,
+                  method = "svmRadialSigma",
+                  preProcess = c("center", "scale"),
+                  tuneGrid = svmr.grid,
+                  trControl = ctrl)
+plot(svmr.fit, highlight = TRUE)
+
+svmr.fit$bestTune
+
+svmr.pred <- predict(svmr.fit, newdata = test,
+                     type = "prob")[,1]
+
+roc.svmr <- roc(test$qual, svmr.pred)
+plot(roc.svmr, legacy.axes = TRUE)
+modelName <- "svmr"
+legend("bottomright", legend = paste0(modelName, ": ", round(roc.svmr$auc[1],3)),
        col = 1:3, lwd = 2)
 ```
 
@@ -509,6 +478,7 @@ matrix.linear.pred = confusionMatrix(data = pred.linear,
 
 test_error_rate <- mean(testData$qual != pred.linear)
 ```
+
 
 
 ```{r}
