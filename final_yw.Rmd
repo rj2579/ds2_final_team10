@@ -9,6 +9,7 @@ output:
 
 ## Introduction
 
+This is the introduction of the dataset and the aims of this projects:
 ```{r, echo=FALSE,  results='hide', message=FALSE, warning=FALSE}
 library(tidyverse)
 library(dplyr)
@@ -19,8 +20,19 @@ library(glmnet)
 library(pROC)
 library(AppliedPredictiveModeling)
 library(MASS)
+library(rpart)
+library(rpart.plot)
+library(e1071)
+library(kernlab)
+library(DALEX)
+```
 
 
+## Exploratory analysis
+
+A description of the data in different categories of exposures.
+
+```{r}
 # Read in data
 wine <- read.csv("./winequality-red.csv", stringsAsFactors = FALSE) %>% 
   janitor::clean_names() %>% 
@@ -39,7 +51,359 @@ featurePlot(x = wine[, 1:11],
             auto.key = list(columns = 2))
 ```
 
+## Model Building
+
+### Data Partition
+
 ```{r}
+set.seed(1)
+indexTrain <- createDataPartition(y = wine$qual, p = 0.7, list = FALSE)
+trainData <- wine[indexTrain, ]
+testData <- wine[-indexTrain, ]
+```
+
+### Linear models for classification
+
+Logistic regression
+```{r}
+# Using caret
+ctrl <- trainControl(method = "cv", number = 10,
+                     summaryFunction = twoClassSummary,
+                     classProbs = TRUE)
+set.seed(1)
+model.glm <- train(x = trainData %>% dplyr::select(-qual),
+                   y = trainData$qual,
+                   method = "glm",
+                   metric = "ROC",
+                   trControl = ctrl)
+
+# Checking the significance of predictors
+summary(model.glm)
+
+# Building confusion matrix
+test.pred.prob <- predict(model.glm, newdata = testData,
+                           type = "prob")
+test.pred <- rep("good", length(test.pred.prob$good))
+test.pred[test.pred.prob$good < 0.5] <- "poor"
+
+confusionMatrix(data = as.factor(test.pred),
+                reference = testData$qual,
+                positive = "good")
+
+# Plot the test ROC
+roc.glm <- roc(testData$qual, test.pred.prob$good)
+plot(roc.glm, legacy.axes = TRUE, print.auc = TRUE)
+plot(smooth(roc.glm), col = 4, add = TRUE)
+```
+ROC = 0.818
+
+
+Penalized logistic regression
+```{r}
+glmnGrid <- expand.grid(.alpha = seq(0, 1, length = 6),
+                        .lambda = exp(seq(-8, -2, length = 20)))
+set.seed(1)
+model.glmn <- train(x = trainData %>% dplyr::select(-qual),
+                    y = trainData$qual,
+                    method = "glmnet",
+                    tuneGrid = glmnGrid,
+                    metric = "ROC",
+                    trControl = ctrl)
+
+plot(model.glmn, xTrans = function(x) log(x))   
+
+# select the best tune
+model.glmn$bestTune
+
+# Building confusion matrix
+test.pred.prob2 <- predict(model.glmn, newdata = testData,
+                           type = "prob")
+test.pred2 <- rep("good", length(test.pred.prob2$good))
+test.pred2[test.pred.prob2$good < 0.5] <- "poor"
+
+confusionMatrix(data = as.factor(test.pred2),
+                reference = testData$qual,
+                positive = "good")
+
+# Plot the test ROC
+roc.glmn <- roc(testData$qual, test.pred.prob2$good)
+plot(roc.glm, legacy.axes = TRUE, print.auc = TRUE)
+plot(smooth(roc.glm), col = 4, add = TRUE)
+```
+ROC = 0.818
+
+
+GAM
+```{r}
+set.seed(1)
+model.gam <- train(x = trainData %>% dplyr::select(-qual),
+                  y = trainData$qual,
+                   method = "gam",
+                   metric = "ROC",
+                   trControl = ctrl)
+
+
+model.gam$finalModel
+
+plot(model.gam$finalModel)
+
+# Building confusion matrix
+test.pred.prob3 <- predict(model.gam, newdata = testData,
+                           type = "prob")
+test.pred3 <- rep("good", length(test.pred.prob3$good))
+test.pred3[test.pred.prob3$good < 0.5] <- "poor"
+
+confusionMatrix(data = as.factor(test.pred3),
+                reference = testData$qual,
+                positive = "good")
+
+# Plot the test ROC
+roc.gam <- roc(testData$qual, test.pred.prob3$good)
+plot(roc.gam, legacy.axes = TRUE, print.auc = TRUE)
+plot(smooth(roc.gam), col = 4, add = TRUE)
 
 ```
+ROC = 0.829
+
+MARS
+```{r}
+set.seed(1)
+model.mars <- train(x = trainData %>% dplyr::select(-qual),
+                    y = trainData$qual,
+                    method = "earth",
+                    tuneGrid = expand.grid(degree = 1:3, 
+                                           nprune = 2:13),
+                    metric = "ROC",
+                    trControl = ctrl)
+
+plot(model.mars)
+
+coef(model.mars$finalModel) 
+
+vip(model.mars$finalModel)
+
+# Building confusion matrix
+test.pred.prob4 <- predict(model.mars, newdata = testData,
+                           type = "prob")
+test.pred4 <- rep("good", length(test.pred.prob4$good))
+test.pred4[test.pred.prob4$good < 0.5] <- "poor"
+
+confusionMatrix(data = as.factor(test.pred4),
+                reference = testData$qual,
+                positive = "good")
+
+# Plot the test ROC
+roc.mars <- roc(testData$qual, test.pred.prob4$good)
+plot(roc.mars, legacy.axes = TRUE, print.auc = TRUE)
+plot(smooth(roc.mars), col = 4, add = TRUE)
+
+```
+ROC = 0.823
+
+LDA
+```{r}
+set.seed(1)
+model.lda <- train(x = trainData %>% dplyr::select(-qual),
+                  y = trainData$qual,
+                   method = "lda",
+                   metric = "ROC",
+                   trControl = ctrl)
+
+# Building confusion matrix
+test.pred.prob5 <- predict(model.lda, newdata = testData,
+                           type = "prob")
+test.pred5 <- rep("good", length(test.pred.prob5$good))
+test.pred5[test.pred.prob5$good < 0.5] <- "poor"
+
+confusionMatrix(data = as.factor(test.pred5),
+                reference = testData$qual,
+                positive = "good")
+
+# Plot the test ROC
+roc.lda <- roc(testData$qual, test.pred.prob5$good)
+plot(roc.lda, legacy.axes = TRUE, print.auc = TRUE)
+plot(smooth(roc.lda), col = 4, add = TRUE)
+```
+ROC = 0.819
+
+QDA
+```{r}
+set.seed(1)
+model.qda <- train(x = trainData %>% dplyr::select(-qual),
+                  y = trainData$qual,
+                   method = "qda",
+                   metric = "ROC",
+                   trControl = ctrl)
+
+# Building confusion matrix
+test.pred.prob6 <- predict(model.qda, newdata = testData,
+                           type = "prob")
+test.pred6 <- rep("good", length(test.pred.prob6$good))
+test.pred6[test.pred.prob6$good < 0.5] <- "poor"
+
+confusionMatrix(data = as.factor(test.pred6),
+                reference = testData$qual,
+                positive = "good")
+
+# Plot the test ROC
+roc.lda <- roc(testData$qual, test.pred.prob6$good)
+plot(roc.lda, legacy.axes = TRUE, print.auc = TRUE)
+plot(smooth(roc.lda), col = 4, add = TRUE)
+```
+ROC = 0.784
+
+KNN
+```{r}
+kGrid <- expand.grid(k = seq(from = 1, to = 40, by = 1))
+
+set.seed(1)
+fit.knn <- train(qual ~ ., 
+                 data = trainData,
+                 method = "knn",
+                 metric = "ROC",
+                 trControl = ctrl, 
+                 tuneGrid = kGrid)
+
+ggplot(fit.knn)
+
+## The best TuneGrid
+fit.knn$bestTune
+
+# Building confusion matrix
+test.pred.prob7 <- predict(fit.knn, newdata = testData,
+                           type = "prob")
+test.pred7 <- rep("good", length(test.pred.prob7$good))
+test.pred7[test.pred.prob7$good < 0.5] <- "poor"
+
+confusionMatrix(data = as.factor(test.pred7),
+                reference = testData$qual,
+                positive = "good")
+
+# Plot the test ROC
+roc.knn <- roc(testData$qual, test.pred.prob7$good)
+plot(roc.knn, legacy.axes = TRUE, print.auc = TRUE)
+plot(smooth(roc.knn), col = 4, add = TRUE)
+```
+ROC = 0.672
+
+Naive Bayes (NB) ????????????????????????????????????? lots of warnings
+```{r}
+set.seed(1)
+nbGrid <- expand.grid(usekernel = c(FALSE,TRUE),
+                      fL = 1, 
+                      adjust = seq(.2, 3, by = .2))
+
+model.nb <- train(x = trainData %>% dplyr::select(-qual),
+                  y = trainData$qual,
+                  method = "nb",
+                  tuneGrid = nbGrid,
+                  metric = "ROC",
+                  trControl = ctrl)
+
+plot(model.nb)
+```
+
+Classification Tree
+
+```{r}
+
+set.seed(1)
+rpart_grid = data.frame(cp = exp(seq(-8,-4, len = 30)))
+class.tree = train(qual~., trainData,
+                  method = "rpart",
+                  tuneGrid = rpart_grid,
+                  trControl = ctrl,
+                  metric = "ROC")
+ggplot(class.tree, highlight = TRUE)
+
+rpart.plot(class.tree$finalModel)
+
+## Calculate the test error
+rpart.pred = predict(class.tree, newdata = test_data, type = "raw")
+
+error <- mean(test_data$Purchase != rpart.pred)
+
+# Building confusion matrix
+test.pred.prob8 <- predict(class.tree, newdata = testData,
+                           type = "prob")
+test.pred8 <- rep("good", length(test.pred.prob8$good))
+test.pred8[test.pred.prob8$good < 0.5] <- "poor"
+
+confusionMatrix(data = as.factor(test.pred8),
+                reference = testData$qual,
+                positive = "good")
+
+# Plot the test ROC
+roc.ctree <- roc(testData$qual, test.pred.prob8$good)
+plot(roc.ctree, legacy.axes = TRUE, print.auc = TRUE)
+plot(smooth(roc.ctree), col = 4, add = TRUE)
+```
+ROC = 0.811
+
+???????????????????????????do we need to include variable importance? Boosting; random forest in caret?
+
+SVM with linear kernal
+```{r}
+set.seed(1)
+linear.tune <- tune.svm(qual ~ . ,
+                        data = trainData,
+                        kernel = "linear",
+                        cost = exp(seq(-5,2,len=50)),
+                        scale = TRUE)
+plot(linear.tune)
+
+# summary(linear.tune)
+linear.tune$best.parameters
+
+best.linear <- linear.tune$best.model
+
+## Calculate the train error rate
+train.linear <- predict(best.linear, newdata = trainData)
+
+matrix.linear.train = confusionMatrix(data = train.linear, 
+                reference = trainData$qual)
+
+train_error_rate = 1-matrix.linear.train$overall[[1]]
+
+## Calculate the test error rate
+pred.linear <- predict(best.linear, newdata = testData)
+
+matrix.linear.pred = confusionMatrix(data = pred.linear, 
+                reference = testData$qual)
+
+test_error_rate <- mean(testData$qual != pred.linear)
+```
+
+
+```{r}
+set.seed(1)
+radial.tune <- tune.svm(qual ~ . , 
+                        data = trainData, 
+                        kernel = "radial", 
+                        cost = exp(seq(-1,4,len=10)),
+                        gamma = exp(seq(-6,-2,len=10)))
+
+plot(radial.tune, transform.y = log, transform.x = log, 
+     color.palette = terrain.colors)
+
+best.radial <- radial.tune$best.model
+summary(best.radial)
+
+## Calculate the train error rate
+train.radial <- predict(best.radial, newdata = trainData)
+
+matrix.radial.train = confusionMatrix(data = train.radial, 
+                reference = trainData$qual)
+
+train_error_rate2 = 1-matrix.radial.train$overall[[1]]
+
+## Calculate the test error rate
+pred.radial <- predict(best.radial, newdata = testData)
+
+matrix.radial.pred = confusionMatrix(data = pred.radial, 
+                reference = testData$qual)
+
+test_error_rate2 <- mean(testData$qual != pred.radial)
+```
+
 
