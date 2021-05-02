@@ -319,9 +319,9 @@ ggplot(class.tree, highlight = TRUE)
 rpart.plot(class.tree$finalModel)
 
 ## Calculate the test error
-rpart.pred = predict(class.tree, newdata = test_data, type = "raw")
+rpart.pred = predict(class.tree, newdata = testData, type = "raw")
 
-error <- mean(test_data$Purchase != rpart.pred)
+error <- mean(testData$Purchase != rpart.pred)
 
 # Building confusion matrix
 test.pred.prob8 <- predict(class.tree, newdata = testData,
