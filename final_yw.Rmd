@@ -286,23 +286,6 @@ plot(smooth(roc.knn), col = 4, add = TRUE)
 ```
 ROC = 0.672
 
-Naive Bayes (NB) ????????????????????????????????????? lots of warnings
-```{r}
-set.seed(1)
-nbGrid <- expand.grid(usekernel = c(FALSE,TRUE),
-                      fL = 1, 
-                      adjust = seq(.2, 3, by = .2))
-
-model.nb <- train(x = trainData %>% dplyr::select(-qual),
-                  y = trainData$qual,
-                  method = "nb",
-                  tuneGrid = nbGrid,
-                  metric = "ROC",
-                  trControl = ctrl)
-
-plot(model.nb)
-```
-
 Classification Tree
 
 ```{r}
@@ -319,9 +302,9 @@ ggplot(class.tree, highlight = TRUE)
 rpart.plot(class.tree$finalModel)
 
 ## Calculate the test error
-rpart.pred = predict(class.tree, newdata = test_data, type = "raw")
+rpart.pred = predict(class.tree, newdata = testData, type = "raw")
 
-error <- mean(test_data$Purchase != rpart.pred)
+error <- mean(testData$qual != rpart.pred)
 
 # Building confusion matrix
 test.pred.prob8 <- predict(class.tree, newdata = testData,
