@@ -1,0 +1,355 @@
+---
+title: "Final"
+author: "Team 10"
+date: "5/2/2021"
+output: pdf_document
+---
+
+## Introduction
+
+Describe your data set. Provide proper motivation for your work.
+
+What questions are you trying to answer?
+How did you prepare and clean the data?
+
+This is the introduction of the dataset and the aims of this projects:
+```{r, echo=FALSE,  results='hide', message=FALSE, warning=FALSE}
+library(tidyverse)
+library(dplyr)
+library(caret)
+library(mgcv)
+library(ggplot2)
+library(glmnet)
+library(pROC)
+library(AppliedPredictiveModeling)
+library(MASS)
+library(rpart)
+library(rpart.plot)
+library(e1071)
+library(kernlab)
+library(DALEX)
+library(table1)
+library(tableone)
+library(vip)
+```
+
+ 
+## Exploratory analysis
+
+In total 855 wines were classified as "Good" quality and 744 as "Poor" quality. The average values for the 11 features for wines of good and poor quality was shown in Table 1. Fixed acidity, volatile acidity, citric acid, chlorides, free sulfur dioxide, total sulfur dioxide, density, sulphates and alcohol were significantly associated with the wine quality (P-values for t-tests < 0.05), which suggests important predictors. 
+
+We also built the density plots to explore the distribution of the 11 continuous variables over "Poor" and "Good" quality of wine (Figure 1). The plots showed that wine with good and poor quality did not differ for PH and residual sugar, while different types of wine differs in other variables, which was consistent with the t-test results.
+
+```{r}
+# Read in data
+wine <- read.csv("./winequality-red.csv", stringsAsFactors = FALSE) %>% 
+  janitor::clean_names() %>% 
+  na.omit() %>% 
+  mutate(qual = case_when(quality > 5 ~ "good", quality <= 5 ~ "poor")) %>% 
+  mutate(qual = as.factor(qual)) %>% 
+  dplyr::select(-quality)
+
+theme1 <- transparentTheme(trans = .4)
+trellis.par.set(theme1)
+featurePlot(x = wine[, 1:11], 
+            y = wine$qual,
+            scales = list(x = list(relation = "free"),
+                          y = list(relation = "free")),
+            plot = "density", pch = "|",
+            auto.key = list(columns = 2))
+```
+
+<center>
+
+**Figure 1. Descriptive plots between wine quality and predictive features.**
+
+</center>
+
+
+<center>
+
+**Table 1. Basic characteristics of wines over good and poor quality.**
+
+</center>
+
+```{r}
+# Create a variable list which we want in Table 1
+listVars <- c("fixed_acidity", "volatile_acidity","citric_acid", "residual_sugar", "chlorides", "free_sulfur_dioxide", "total_sulfur_dioxide", "density", "p_h", "sulphates", "alcohol")
+
+tab1 <- CreateTableOne(vars = listVars, strata = 'qual', data = wine)
+
+tab1
+
+# Table 1
+table1(~ fixed_acidity + volatile_acidity + citric_acid + residual_sugar + chlorides+free_sulfur_dioxide + total_sulfur_dioxide + density + p_h + sulphates + alcohol+ qual| qual, data = wine)
+```
+
+## Model Building
+
+We randomly selected 70% of the observations as the training data and the rest as the test data. All the 11 predictors were included into analysis. We performed linear methods, non-linear methods and the tree method to predict the classification of wine quality. For linear methods, we trained (penalized) logistic regression model and linear discriminant analysis (LDA). The assumptions for logistic regression includes observations being independent of each other and the linearity of independent variables and log odds. LDA assumes normally distributed features, but LDA was robust for classification. For nonlinear models, we performed generalized additive model (GAM), multivariate adaptive regression splines (MARS), KNN model and quadratic discriminant analysis (QDA). For tree models, we conducted classification tree, boosting and random forest model. We calculated the ROC and accuracy for model selection, and also investigated the variable importance. 10-fold cross-validation (CV) were used for all model buildings.
+ 
+```{r}
+### Data Partition
+set.seed(1)
+indexTrain <- createDataPartition(y = wine$qual, p = 0.7, list = FALSE)
+trainData <- wine[indexTrain, ]
+testData <- wine[-indexTrain, ]
+```
+
+#### Linear models
+
+The multiple logistic regression showed that among the 11 predictors, volatile acidity, citric acid, free sulfur dioxide, total sulfur dioxide, sulphates and alcohol were significantly associated with wine quality (P-values < 0.05), explaining 25.1% of the total variance in wine quality. When applying this model to the test data, the accuracy is 0.75 (95%CI: 0.71-0.79) and the ROC is 0.818, which suggests relatively good fit for the data. When performing the penalized logistic regression, we found that when maximizing the ROC, the best tuning parameter was alpha=1 and lambda=0.00086, the accuracy was 0.75 (95%CI: 0.71-0.79) and the ROC was also 0.818. Since lambda was close to zero and the ROC was the same as the full logistic regression model, the penalization was relatively small, which suggested that the full logistic regression model was simple enough for classification. However, since logistic regression requires there to be little or no multicollinearity among the independent variables, the model may be disturbed by collinearity between the 11 predictors, if there was any.
+
+```{r}
+### Logistic regression
+# Using caret
+ctrl <- trainControl(method = "cv", number = 10,
+                     summaryFunction = twoClassSummary,
+                     classProbs = TRUE)
+set.seed(1)
+model.glm <- train(x = trainData %>% dplyr::select(-qual),
+                   y = trainData$qual,
+                   method = "glm",
+                   metric = "ROC",
+                   trControl = ctrl)
+
+# Checking the significance of predictors
+summary(model.glm)
+
+# Building confusion matrix
+test.pred.prob <- predict(model.glm, newdata = testData,
+                           type = "prob")
+test.pred <- rep("good", length(test.pred.prob$good))
+test.pred[test.pred.prob$good < 0.5] <- "poor"
+
+confusionMatrix(data = as.factor(test.pred),
+                reference = testData$qual,
+                positive = "good")
+
+# Plot the test ROC
+roc.glm <- roc(testData$qual, test.pred.prob$good)
+plot(roc.glm, legacy.axes = TRUE, print.auc = TRUE)
+plot(smooth(roc.glm), col = 4, add = TRUE)
+
+## Test error and train error
+error.test.glm <- mean(testData$qual != test.pred)
+
+train.pred.prob.glm <- predict(model.glm, newdata = trainData,
+                           type = "prob")
+train.pred.glm <- rep("good", length(train.pred.prob.glm$good))
+train.pred.glm[train.pred.prob.glm$good < 0.5] <- "poor"
+error.trian.glm <- mean(trainData$qual != train.pred.glm)
+```
+
+
+```{r}
+### Penalized logistic regression
+glmnGrid <- expand.grid(.alpha = seq(0, 1, length = 6),
+                        .lambda = exp(seq(-8, -2, length = 20)))
+set.seed(1)
+model.glmn <- train(x = trainData %>% dplyr::select(-qual),
+                    y = trainData$qual,
+                    method = "glmnet",
+                    tuneGrid = glmnGrid,
+                    metric = "ROC",
+                    trControl = ctrl)
+
+plot(model.glmn, xTrans = function(x) log(x))   
+
+# select the best tune
+model.glmn$bestTune
+
+# Building confusion matrix
+test.pred.prob2 <- predict(model.glmn, newdata = testData,
+                           type = "prob")
+test.pred2 <- rep("good", length(test.pred.prob2$good))
+test.pred2[test.pred.prob2$good < 0.5] <- "poor"
+
+confusionMatrix(data = as.factor(test.pred2),
+                reference = testData$qual,
+                positive = "good")
+
+# Plot the test ROC
+roc.glmn <- roc(testData$qual, test.pred.prob2$good)
+plot(roc.glm, legacy.axes = TRUE, print.auc = TRUE)
+plot(smooth(roc.glm), col = 4, add = TRUE)
+
+## Test error and train error
+error.test.glmn <- mean(testData$qual != test.pred2)
+
+train.pred.prob.glmn <- predict(model.glmn, newdata = trainData,
+                           type = "prob")
+train.pred.glmn <- rep("good", length(train.pred.prob.glmn$good))
+train.pred.glmn[train.pred.prob.glmn$good < 0.5] <- "poor"
+error.trian.glmn <- mean(trainData$qual != train.pred.glmn)
+```
+
+#### Nonlinear models
+
+In the GAM model, only the degree of freedom for volatile acidity was equal to 1, suggesting linear association, while smoothing spline was applied for all other 10 variables. The results showed that alcohol, citric acid, residual sugar, sulphates, fixed acidity, volatile acidity, chlorides and total sulfur dioxide were significant predictors (P-values < 0.05). In total, these variables explained 39.1% of the total variance in wine quality. The confusion matrix using the test data showed that the accuracy for GAM was 0.76 (95%CI: 0.72-0.80) and the ROC was 0.829. The MARS model showed that when maximizing the ROC, we included 5 terms out of 11 predictors, with nprune equal to 5 and degree of 2. In total, these predictors and hinge functions explained 32.2% of the total variance. According to the MARS output, the 3 most important predictors were total sulfur dioxide, alcohol and sulphates. When applying the MARS model to the test data, the accuracy is 0.76 (95%CI: 0.72, 0.80) and the ROC is 0.823. We also performed the KNN model for classification. When k was equal to 22, the ROC was maximized. The accuracy for KNN model was 0.63 (95%CI: 0.59-0.68) and the ROC was 0.672.
+
+The advantage of GAM and MARS is that both two models are nonparametric models and able to deal with highly complex nonlinear relationship. Specifically, MARS model can include potential interaction effects into the model. However, because of the model complexity, time-consuming computation and the high propensity of overfitting are the limitations for the two models. As for the KNN model, when k was large, the prediction may not be accurate.
+
+```{r}
+### GAM
+set.seed(1)
+model.gam <- train(x = trainData %>% dplyr::select(-qual),
+                  y = trainData$qual,
+                   method = "gam",
+                   metric = "ROC",
+                   trControl = ctrl)
+
+
+model.gam$finalModel
+summary(model.gam)
+plot(model.gam$finalModel)
+
+# Building confusion matrix
+test.pred.prob3 <- predict(model.gam, newdata = testData,
+                           type = "prob")
+test.pred3 <- rep("good", length(test.pred.prob3$good))
+test.pred3[test.pred.prob3$good < 0.5] <- "poor"
+
+confusionMatrix(data = as.factor(test.pred3),
+                reference = testData$qual,
+                positive = "good")
+
+# Plot the test ROC
+roc.gam <- roc(testData$qual, test.pred.prob3$good)
+plot(roc.gam, legacy.axes = TRUE, print.auc = TRUE)
+plot(smooth(roc.gam), col = 4, add = TRUE)
+
+## Test error and train error
+error.test.gam <- mean(testData$qual != test.pred3)
+
+train.pred.prob.gam <- predict(model.gam, newdata = trainData,
+                           type = "prob")
+train.pred.gam <- rep("good", length(train.pred.prob.gam$good))
+train.pred.gam[train.pred.prob.gam$good < 0.5] <- "poor"
+error.trian.gam <- mean(trainData$qual != train.pred.gam)
+```
+
+```{r}
+### MARS
+set.seed(1)
+model.mars <- train(x = trainData %>% dplyr::select(-qual),
+                    y = trainData$qual,
+                    method = "earth",
+                    tuneGrid = expand.grid(degree = 1:3, 
+                                           nprune = 2:23),
+                    metric = "ROC",
+                    trControl = ctrl)
+
+plot(model.mars)
+
+model.mars$bestTune
+model.mars$finalModel
+
+vip(model.mars$finalModel)
+
+# Building confusion matrix
+test.pred.prob4 <- predict(model.mars, newdata = testData,
+                           type = "prob")
+test.pred4 <- rep("good", length(test.pred.prob4$good))
+test.pred4[test.pred.prob4$good < 0.5] <- "poor"
+
+confusionMatrix(data = as.factor(test.pred4),
+                reference = testData$qual,
+                positive = "good")
+
+# Plot the test ROC
+roc.mars <- roc(testData$qual, test.pred.prob4$good)
+plot(roc.mars, legacy.axes = TRUE, print.auc = TRUE)
+plot(smooth(roc.mars), col = 4, add = TRUE)
+
+## Test error and train error
+error.test.mars <- mean(testData$qual != test.pred4)
+
+train.pred.prob.mars <- predict(model.mars, newdata = trainData,
+                           type = "prob")
+train.pred.mars <- rep("good", length(train.pred.prob.mars$good))
+train.pred.mars[train.pred.prob.mars$good < 0.5] <- "poor"
+error.trian.mars <- mean(trainData$qual != train.pred.mars)
+```
+
+
+```{r}
+### KNN
+kGrid <- expand.grid(k = seq(from = 1, to = 40, by = 1))
+
+set.seed(1)
+fit.knn <- train(qual ~ ., 
+                 data = trainData,
+                 method = "knn",
+                 metric = "ROC",
+                 trControl = ctrl, 
+                 tuneGrid = kGrid)
+
+ggplot(fit.knn)
+
+## The best TuneGrid
+fit.knn$bestTune
+
+# Building confusion matrix
+test.pred.prob7 <- predict(fit.knn, newdata = testData,
+                           type = "prob")
+test.pred7 <- rep("good", length(test.pred.prob7$good))
+test.pred7[test.pred.prob7$good < 0.5] <- "poor"
+
+confusionMatrix(data = as.factor(test.pred7),
+                reference = testData$qual,
+                positive = "good")
+
+# Plot the test ROC
+roc.knn <- roc(testData$qual, test.pred.prob7$good)
+plot(roc.knn, legacy.axes = TRUE, print.auc = TRUE)
+plot(smooth(roc.knn), col = 4, add = TRUE)
+
+## Test error and train error
+error.test.knn <- mean(testData$qual != test.pred7)
+
+train.pred.prob.knn <- predict(fit.knn, newdata = trainData,
+                           type = "prob")
+train.pred.knn <- rep("good", length(train.pred.prob.knn$good))
+train.pred.knn[train.pred.prob.knn$good < 0.5] <- "poor"
+error.trian.knn <- mean(trainData$qual != train.pred.knn)
+```
+
+
+## Model Comparison
+
+Training ROC
+```{r}
+resamp = resamples(list(logistic = model.glm,
+                        penalized_logistic = model.glmn,
+                        GAM = model.gam,
+                        MARS = model.mars,
+                        knn = fit.knn
+                        ), metric = "accuracy" )
+
+summary(resamp)
+
+comparison = summary(resamp)$statistics$ROC
+r_square = summary(resamp)$statistics$Rsquared
+
+knitr::kable(comparison[,1:6])
+```
+
+
+```{r}
+bwplot(resamp, metric = "ROC")
+```
+
+
+Test and train classification error
+```{r results=TRUE}
+Model_Name <- c("logistic regression", "penalized logistic regression", "GAM", "MARS", "KNN")
+Train_Error <- c(error.trian.glm,error.trian.glmn,error.trian.gam,error.trian.mars,error.trian.knn)
+Test_Error <- c(error.test.glm, error.test.glmn, error.test.gam, error.test.mars, error.test.knn)
+Test_ROC = c(0.818, 0.818, 0.829, 0.823, 0.672)
+
+
+df <- data.frame(Model_Name, Train_Error, Test_Error, Test_ROC)
+
+knitr::kable(df)
+```
