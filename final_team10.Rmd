@@ -60,9 +60,9 @@ trainData <- wine[indexTrain, ]
 testData <- wine[-indexTrain, ]
 ```
 
-### Linear models for classification
 
-Logistic regression
+
+### Logistic regression
 ```{r}
 # Using caret
 ctrl <- trainControl(method = "cv", number = 10,
@@ -94,7 +94,7 @@ plot(roc.glm, legacy.axes = TRUE, print.auc = TRUE)
 plot(smooth(roc.glm), col = 4, add = TRUE)
 ```
 ROC = 0.818
-
+classification error = 1 - accuracy 
 
 ### Penalized logistic regression
 ```{r}

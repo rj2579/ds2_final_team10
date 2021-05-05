@@ -1,0 +1,163 @@
+---
+title: "final_jrq"
+author: "Team 10"
+date: "5/4/2021"
+output: pdf_document
+---
+
+## Introduction
+
+The data source we use for this final project comes from the UCI machine learning repository. It contains information regarding the red and white variants of the Portuguese "Vinho Verde" wine. The dataset has 1599 observations and 12 variables, which are the fixed acidity, volatile acidity, citric acid, residual sugar, chlorides, free sulfur dioxide, total sulfur dioxide, density, pH, sulphates, alcohol, and quality. The fixed acidity, volatile acidity, citric acid, residual sugar, chlorides, free sulfur dioxide, total sulfur dioxide, density, pH, sulphates, and alcohol are independent variables and are continuous. Quality is the response variable and is measured based on a score of 0 to 10.  Later, we re-categorized quality to a binary variable called qual. Qual is considered good if the quality score is greater than 5, otherwise is considered poor.  
+
+By doing this project, we hope to classify the quality of each observation into either good or poor based on their performance on the physicochemical tests. 
+
+```{r, echo=FALSE,  results='hide', message=FALSE, warning=FALSE}
+library(tidyverse)
+library(dplyr)
+library(caret)
+library(mgcv)
+library(ggplot2)
+library(glmnet)
+library(pROC)
+library(AppliedPredictiveModeling)
+library(MASS)
+library(rpart)
+library(rpart.plot)
+library(e1071)
+library(kernlab)
+library(DALEX)
+library(table1)
+library(tableone)
+library(vip)
+library(randomForest)
+library(ranger)
+```
+
+ 
+```{r}
+# Read in data
+wine <- read.csv("./winequality-red.csv", stringsAsFactors = FALSE) %>% 
+  janitor::clean_names() %>% 
+  na.omit() %>% 
+  mutate(qual = case_when(quality > 5 ~ "good", quality <= 5 ~ "poor")) %>% 
+  mutate(qual = as.factor(qual)) %>% 
+  dplyr::select(-quality)
+
+theme1 <- transparentTheme(trans = .4)
+trellis.par.set(theme1)
+featurePlot(x = wine[, 1:11], 
+            y = wine$qual,
+            scales = list(x = list(relation = "free"),
+                          y = list(relation = "free")),
+            plot = "density", pch = "|",
+            auto.key = list(columns = 2))
+```
+
+## Model Building
+
+For each model (except GAM model), we used cross validation to 1) choose a grid of values for tuning parameter 2) compute the cross-validation error rate for each value of tuning parameter 3) select the tuning parameter that gives the lowest cross-validation error.
+
+### Data Partition
+
+```{r}
+set.seed(1)
+indexTrain <- createDataPartition(y = wine$qual, p = 0.7, list = FALSE)
+trainData <- wine[indexTrain, ]
+testData <- wine[-indexTrain, ]
+```
+
+
+## Classification Tree
+
+```{r}
+# Using caret
+ctrl <- trainControl(method = "cv", number = 10,
+                     summaryFunction = twoClassSummary,
+                     classProbs = TRUE)
+
+set.seed(1)
+rpart_grid = data.frame(cp = exp(seq(-10,-5, len = 30)))
+class.tree = train(qual~., trainData,
+                  method = "rpart",
+                  tuneGrid = rpart_grid,
+                  trControl = ctrl,
+                  metric = "ROC")
+
+ggplot(class.tree, highlight = TRUE)
+
+rpart.plot(class.tree$finalModel)
+
+## Calculate the test error
+rpart.pred = predict(class.tree, newdata = testData, type = "raw")
+mean(testData$qual != rpart.pred)
+
+## Calculate the train error
+rpart.pred_train = predict(class.tree, newdata = trainData, type = "raw")
+mean(trainData$qual != rpart.pred_train)
+
+# Building confusion matrix
+test.pred.prob8 <- predict(class.tree, newdata = testData,
+                           type = "prob")
+test.pred8 <- rep("good", length(test.pred.prob8$good))
+test.pred8[test.pred.prob8$good < 0.5] <- "poor"
+
+confusionMatrix(data = as.factor(test.pred8),
+                reference = testData$qual,
+                positive = "good")
+
+# Plot the test ROC
+roc.ctree <- roc(testData$qual, test.pred.prob8$good)
+plot(roc.ctree, legacy.axes = TRUE, print.auc = TRUE)
+plot(smooth(roc.ctree), col = 4, add = TRUE)
+```
+Based on the cross validation, the final tree size is 41. The test classification test error rate is 0.2422. The test classification train error rate is 0.1509. ROC is 0.806. The accuracy of this classification tree is 75.78%.
+
+
+### Perform random forest and report the variable importance
+```{r}
+ctrl <- trainControl(method = "cv", number = 10,
+                     classProbs = TRUE, 
+                     summaryFunction = twoClassSummary)
+
+rf.grid <- expand.grid(mtry = 1:10,
+                       splitrule = "gini",
+                       min.node.size = seq(from = 1, to = 12, by = 2))
+set.seed(1)
+rf.fit <- train(qual ~ . , 
+                trainData, 
+                method = "ranger",
+                tuneGrid = rf.grid,
+                metric = "ROC",
+                trControl = ctrl)
+
+ggplot(rf.fit, highlight = TRUE)
+rf.fit$bestTune
+
+
+# compute importance
+set.seed(1)
+random_forest <- ranger(qual ~ . , 
+                        trainData, 
+                        mtry = 1,
+                        splitrule = "gini",
+                        min.node.size = 1,
+                        importance = "permutation",
+                        scale.permutation.importance = TRUE) 
+
+barplot(sort(ranger::importance(random_forest), decreasing = FALSE), 
+        las = 2, horiz = TRUE, cex.names = 0.4,
+        col = colorRampPalette(colors = c("cyan","blue"))(8))
+
+
+# compute the test error rate 
+rf.pred <- predict(rf.fit, newdata = testData)
+mean(testData$qual != rf.pred) 
+
+# compute the train error rate 
+rf.pred_train <- predict(rf.fit, newdata = trainData)
+mean(trainData$qual != rf.pred_train) 
+```
+Alcohol is the most important variable, and followed by sulphates, volatile acidity, total sulfur dioxide, density, chlorides, fixed acidity, citric acid, free sulfur dioxide, and residual sugar. pH is the least important variable. The test error rate is 0.163. The train error rate is 0.
+
+
+
