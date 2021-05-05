@@ -31,6 +31,8 @@ library(DALEX)
 library(table1)
 library(tableone)
 library(vip)
+library(randomForest)
+library(ranger)
 ```
 
  
