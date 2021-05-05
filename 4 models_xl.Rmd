@@ -82,7 +82,7 @@ error.lda <- mean(testData$qual != lda.pred)
 # variable importance
 varImp(model.lda)
 ```
-ROC = 0.819, test error is 0.2380, ROC is 0.8142 (test error is 1-0.8142=0.1858). Assumes that predictor variables are normally distributed  for "each level of the grouping variable"good" and "poor" quality of wine. Compared to logistic regression, LDA is better when the two classes of wine are well separated. The most important variables in predicting wine quality are alcohol, volatile acidity and sulphates.
+ROC = 0.819, test error is 0.2380, train ROC is 0.8142 (train error is 1-0.8142=0.1858). Assumes that predictor variables are normally distributed  for "each level of the grouping variable"good" and "poor" quality of wine. Compared to logistic regression, LDA is better when the two classes of wine are well separated. The most important variables in predicting wine quality are alcohol, volatile acidity and sulphates.
 
 ### QDA
 ```{r}
@@ -118,7 +118,7 @@ error.qda <- mean(testData$qual != qda.pred)
 # variable importance
 varImp(model.qda)
 ```
-ROC = 0.784. Test error is 0.2923, ROC is 0.7913 (train error is 1-0.7913=0.2087). Assumes that predictor variables are normally distributed  for "each level of the grouping variable"good" and "poor" quality of wine. The most important variables in predicting wine quality are alcohol, volatile acidity and sulphates.
+Test ROC = 0.784. Test error is 0.2923, ROC is 0.7913 (train error is 1-0.7913=0.2087). Assumes that predictor variables are normally distributed  for "each level of the grouping variable"good" and "poor" quality of wine. The most important variables in predicting wine quality are alcohol, volatile acidity and sulphates.
 
 ## SVM with linear kernal (caret)
 ```{r}
@@ -152,9 +152,6 @@ plot(smooth(roc.svml), col = 4, add = TRUE)
 error.svml <- mean(testData$qual != test.pred7)
 
 
-## Calculate the train error rate
-
-
 # train error
 svml.fit
 
@@ -173,7 +170,7 @@ We used SVM with linear kernaland we tuned over cost. We found that the model wi
 
 ## SVM with radial kernal (caret)
 ```{r}
-set.seed(1)
+set.seed(2)
 
 svmr.grid <- expand.grid(C = exp(seq(-1,4,len=10)),
                          sigma = exp(seq(-8,0,len=10)))
@@ -219,5 +216,7 @@ explainer_svmr <- explain(svmr.fit,
 
 vi_svmr <- model_parts(explainer_svmr)
 plot(vi_svmr)
+
+varImp(svmr.fit)
 ```
 When performing SVM with radial kernal, we tuned over both cost and sigma, and found that the model with maximized ROC had sigma = 0.06948 and cost = 1.94773. AUC for this model is 0.829, accuracy is 0.7474 (test error is 0.2526), and ROC is 0.8424 (train error is 1-0.8424=0.1576). Same as SVM using linear kernal, the most important variable for quality prediction is alcohol; sulphates and volatile acidity are the second and third most important variables.
