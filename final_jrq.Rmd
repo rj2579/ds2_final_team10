@@ -110,7 +110,7 @@ roc.ctree <- roc(testData$qual, test.pred.prob8$good)
 plot(roc.ctree, legacy.axes = TRUE, print.auc = TRUE)
 plot(smooth(roc.ctree), col = 4, add = TRUE)
 ```
-Based on the cross validation, the final tree size is 41. The test classification test error rate is 0.2422. The test classification train error rate is 0.1509. ROC is 0.806. The accuracy of this classification tree is 75.78%.
+Based on the cross validation, the final tree size is 41. The test classification test error rate is 0.2422. The test classification train error rate is 0.1509. ROC is 0.809. The accuracy of this classification tree is 75.78%.
 
 
 ### Perform random forest and report the variable importance
@@ -156,6 +156,21 @@ mean(testData$qual != rf.pred)
 # compute the train error rate 
 rf.pred_train <- predict(rf.fit, newdata = trainData)
 mean(trainData$qual != rf.pred_train) 
+
+# Building confusion matrix
+test.pred.prob8 <- predict(rf.fit, newdata = testData,
+                           type = "prob")
+test.pred8 <- rep("good", length(test.pred.prob8$good))
+test.pred8[test.pred.prob8$good < 0.5] <- "poor"
+
+confusionMatrix(data = as.factor(test.pred8),
+                reference = testData$qual,
+                positive = "good")
+
+# Plot the test ROC
+roc.rf <- roc(testData$qual, test.pred.prob8$good)
+plot(roc.rf, legacy.axes = TRUE, print.auc = TRUE)
+plot(smooth(roc.ctree), col = 4, add = TRUE)
 ```
 Alcohol is the most important variable, and followed by sulphates, volatile acidity, total sulfur dioxide, density, chlorides, fixed acidity, citric acid, free sulfur dioxide, and residual sugar. pH is the least important variable. The test error rate is 0.163. The train error rate is 0.
 
