@@ -1,6 +1,6 @@
 ---
 title: "Final"
-author: "Team 10"
+author: "Team 10: Yuqi Wang, Rongqing Jia, Xiaoyu Li"
 date: "5/2/2021"
 output: pdf_document
 ---
@@ -11,7 +11,11 @@ The data source we use for this final project comes from the UCI machine learnin
 
 By doing this project, we hope to classify the quality of each observation into either good or poor based on their performance on the physicochemical tests. 
 
-```{r, echo=FALSE,  results='hide', message=FALSE, warning=FALSE}
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = F, message = FALSE, results='hide', warning = FALSE, fig.show="hide")
+```
+
+```{r}
 library(tidyverse)
 library(dplyr)
 library(caret)
@@ -40,7 +44,7 @@ In total 855 wines were classified as "Good" quality and 744 as "Poor" quality. 
 
 We also built the density plots to explore the distribution of the 11 continuous variables over "Poor" and "Good" quality of wine (Figure 1). The plots showed that wine with good and poor quality did not differ for PH and residual sugar, while different types of wine differs in other variables, which was consistent with the t-test results.
 
-```{r}
+```{r results=TRUE, fig.show= TRUE}
 # Read in data
 wine <- read.csv("./winequality-red.csv", stringsAsFactors = FALSE) %>% 
   janitor::clean_names() %>% 
@@ -72,7 +76,7 @@ featurePlot(x = wine[, 1:11],
 
 </center>
 
-```{r}
+```{r results=TRUE, fig.show= TRUE}
 # Create a variable list which we want in Table 1
 listVars <- c("fixed_acidity", "volatile_acidity","citric_acid", "residual_sugar", "chlorides", "free_sulfur_dioxide", "total_sulfur_dioxide", "density", "p_h", "sulphates", "alcohol")
 
@@ -612,7 +616,13 @@ After model building, we conducted model comparisons based on the training and t
 
 While looking at the summary of each model, we realize that KNN model has the lowest AUC value and the largest test classification error rate, 0.367. The other nine models have close AUC values that are about 82%.
 
-```{r}
+<center>
+
+**Table 2. Model comparison of ROCs and R square of all models**
+
+</center>
+
+```{r results=TRUE}
 resamp = resamples(list(logistic = model.glm,
                         penalized_logistic = model.glmn,
                         LDA = model.lda,
@@ -626,8 +636,6 @@ resamp = resamples(list(logistic = model.glm,
                         SVMR = svmr.fit
                         ), metric = "accuracy" )
 
-summary(resamp)
-
 comparison = summary(resamp)$statistics$ROC
 r_square = summary(resamp)$statistics$Rsquared
 
@@ -635,10 +643,22 @@ knitr::kable(comparison[,1:6])
 ```
 
 
-```{r}
+```{r results=TRUE, fig.show= TRUE}
 bwplot(resamp, metric = "ROC")
 ```
 
+<center>
+
+**Figure 2. Model comparison: ROC values for all models**
+
+</center>
+
+
+<center>
+
+**Table 3. Test classification error rates, train classification error rate and test ROC values for all models**
+
+</center>
 
 ```{r results=TRUE}
 Model_Name <- c("logistic regression", "penalized logistic regression", "LDA", "GAM", "MARS", "KNN", "QDA", "Classification Tree", "Random forest", "SVM with linear kernel", "SVM with radial kernel")
