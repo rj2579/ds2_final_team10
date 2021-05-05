@@ -510,7 +510,7 @@ plot(smooth(roc.ctree), col = 4, add = TRUE)
 We used SVM with linear kernal and we tuned over cost. We found that the model with maximized ROC had cost = 0.59078. ROC for this model is 0.816, accuracy is 0.75 (test error is 0.25) (95%CI: 0.71-0.79). The most important variable for quality prediction is alcohol; volatile acidity and total sulfur dioxide are also relatively important variables. When performing SVM with radial kernal, we tuned over both cost and sigma, and found that the model with maximized ROC had sigma = 0.0286 and cost = 17.9733. ROC for this model is 0.821, accuracy is 0.75 (test error is 0.25) (95%CI: 0.71-0.79). Same as SVM using linear kernal, the most important variable for quality prediction is alcohol; sulphates and volatile acidity are the second and third most important variables. If the true boundary is non-linear, SVM with radial kernel performs better.
 
 ```{r cache = TRUE}
-## SVM with linear kernal (caret)
+# SVM with linear kernel
 set.seed(1)
 
 svml.fit <- train(qual ~ . ,
@@ -537,11 +537,11 @@ roc.svml <- roc(testData$qual, test.pred.prob7$good)
 plot(roc.svml, legacy.axes = TRUE, print.auc = TRUE)
 plot(smooth(roc.svml), col = 4, add = TRUE)
 
-## Calculate the test error
+# Calculate the test error
 error.test.svml <- mean(testData$qual != test.pred7)
 
 
-## Calculate the train error rate
+# Calculate the train error rate
 pred.train.svml = predict(svml.fit, newdata = trainData,type = "raw")
 error.train.svml = mean(trainData$qual != pred.train.svml)
 
@@ -549,16 +549,15 @@ error.train.svml = mean(trainData$qual != pred.train.svml)
 explainer_svm <- explain(svml.fit,
                          abel = "svml",
                          ata = trainData %>% dplyr::select(-qual),
-                         y = as.numeric(trainData$qual == "good"),  ### qual still in graph
+                         y = as.numeric(trainData$qual == "good"),
                          verbose = FALSE)
-# variable importance
 
 vi_svm <- model_parts(explainer_svm)
 plot(vi_svm)
 ```
 
 ```{r cache = TRUE}
-## SVM with radial kernal (caret)
+# SVM with radial kernel
 set.seed(1)
 
 svmr.grid <- expand.grid(C = exp(seq(-1,4,len=10)),
@@ -589,11 +588,11 @@ roc.svmr <- roc(testData$qual, test.pred.prob8$good)
 plot(roc.svmr, legacy.axes = TRUE, print.auc = TRUE)
 plot(smooth(roc.svmr), col = 4, add = TRUE)
 
-## Calculate the test error
+# Calculate the test error
 error.test.svmr <- mean(testData$qual != test.pred8)
 
 
-## Calculate the train error rate
+# Calculate the train error rate
 pred.train.svmr = predict(svmr.fit, newdata = trainData,type = "raw")
 error.train.svmr = mean(trainData$qual != pred.train.svmr)
 
@@ -601,9 +600,8 @@ error.train.svmr = mean(trainData$qual != pred.train.svmr)
 explainer_svmr <- explain(svmr.fit,
                          abel = "svmr",
                          ata = trainData %>% dplyr::select(-qual),
-                         y = as.numeric(trainData$qual == "good"),  ### qual still in graph
+                         y = as.numeric(trainData$qual == "good"),
                          verbose = FALSE)
-# variable importance
 
 vi_svmr <- model_parts(explainer_svmr)
 plot(vi_svmr)
