@@ -192,7 +192,7 @@ svmr.fit$bestTune
 test.pred.prob8 <- predict(svmr.fit, newdata = testData,
                            type = "prob")
 test.pred8 <- rep("good", length(test.pred.prob8$good))
-test.pred8[test.pred.prob7$good < 0.5] <- "poor"
+test.pred8[test.pred.prob8$good < 0.5] <- "poor"
 
 confusionMatrix(data = as.factor(test.pred8),
                 reference = testData$qual,
@@ -220,4 +220,4 @@ explainer_svmr <- explain(svmr.fit,
 vi_svmr <- model_parts(explainer_svmr)
 plot(vi_svmr)
 ```
-When performing SVM with radial kernal, we tuned over both cost and sigma, and found that the model with maximized ROC had sigma = 0.06948 and cost = 1.94773. AUC for this model is 0.829, test error is 0.2526, and ROC is 0.8424 (train error is 1-0.8424=0.1576). Same as SVM using linear kernal, the most important variable for quality prediction is alcohol; sulphates and volatile acidity are the second and third most important variables.
+When performing SVM with radial kernal, we tuned over both cost and sigma, and found that the model with maximized ROC had sigma = 0.06948 and cost = 1.94773. AUC for this model is 0.829, accuracy is 0.7474 (test error is 0.2526), and ROC is 0.8424 (train error is 1-0.8424=0.1576). Same as SVM using linear kernal, the most important variable for quality prediction is alcohol; sulphates and volatile acidity are the second and third most important variables.
