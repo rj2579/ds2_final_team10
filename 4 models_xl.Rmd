@@ -1,0 +1,223 @@
+---
+title: "Final"
+author: "Team 10"
+date: "4/24/2021"
+output:
+  pdf_document:
+    latex_engine: xelatex
+---
+
+
+
+# 4 models
+
+```{r, echo=FALSE,  results='hide', message=FALSE, warning=FALSE}
+library(tidyverse)
+library(dplyr)
+library(caret)
+library(mgcv)
+library(ggplot2)
+library(glmnet)
+library(pROC)
+library(AppliedPredictiveModeling)
+library(MASS)
+library(rpart)
+library(rpart.plot)
+library(e1071)
+library(kernlab)
+library(DALEX)
+```
+
+
+```{r}
+wine <- read.csv("./winequality-red.csv", stringsAsFactors = FALSE) %>% 
+  janitor::clean_names() %>% 
+  na.omit() %>% 
+  mutate(qual = case_when(quality > 5 ~ "good", quality <= 5 ~ "poor")) %>% 
+  mutate(qual = as.factor(qual)) %>% 
+  dplyr::select(-quality)
+
+set.seed(1)
+indexTrain <- createDataPartition(y = wine$qual, p = 0.7, list = FALSE)
+trainData <- wine[indexTrain, ]
+testData <- wine[-indexTrain, ]
+
+ctrl <- trainControl(method = "cv", number = 10,
+                     summaryFunction = twoClassSummary,
+                     classProbs = TRUE)
+```
+
+
+### LDA
+```{r}
+set.seed(1)
+model.lda <- train(x = trainData %>% dplyr::select(-qual),
+                   y = trainData$qual,
+                   method = "lda",
+                   metric = "ROC",
+                   trControl = ctrl)
+
+# Building confusion matrix
+test.pred.prob5 <- predict(model.lda, newdata = testData,
+                           type = "prob")
+test.pred5 <- rep("good", length(test.pred.prob5$good))
+test.pred5[test.pred.prob5$good < 0.5] <- "poor"
+
+confusionMatrix(data = as.factor(test.pred5),
+                reference = testData$qual,
+                positive = "good")
+
+# Plot the test ROC
+roc.lda <- roc(testData$qual, test.pred.prob5$good)
+plot(roc.lda, legacy.axes = TRUE, print.auc = TRUE)
+plot(smooth(roc.lda), col = 4, add = TRUE)
+
+## Calculate the test error
+lda.pred = predict(model.lda, newdata = testData, type = "raw")
+
+error.lda <- mean(testData$qual != lda.pred)
+
+## train error
+
+# variable importance
+varImp(model.lda)
+```
+ROC = 0.819, test error is 0.2380, ROC is 0.8142 (test error is 1-0.8142=0.1858). Assumes that predictor variables are normally distributed  for "each level of the grouping variable"good" and "poor" quality of wine. Compared to logistic regression, LDA is better when the two classes of wine are well separated. The most important variables in predicting wine quality are alcohol, volatile acidity and sulphates.
+
+### QDA
+```{r}
+set.seed(1)
+model.qda <- train(x = trainData %>% dplyr::select(-qual),
+                  y = trainData$qual,
+                   method = "qda",
+                   metric = "ROC",
+                   trControl = ctrl)
+
+# Building confusion matrix
+test.pred.prob6 <- predict(model.qda, newdata = testData,
+                           type = "prob")
+test.pred6 <- rep("good", length(test.pred.prob6$good))
+test.pred6[test.pred.prob6$good < 0.5] <- "poor"
+
+confusionMatrix(data = as.factor(test.pred6),
+                reference = testData$qual,
+                positive = "good")
+
+# Plot the test ROC
+roc.qda <- roc(testData$qual, test.pred.prob6$good)
+plot(roc.qda, legacy.axes = TRUE, print.auc = TRUE)
+plot(smooth(roc.qda), col = 4, add = TRUE)
+
+## Calculate the test error
+qda.pred = predict(model.qda, newdata = testData, type = "raw")
+
+error.qda <- mean(testData$qual != qda.pred)
+
+## train error
+
+# variable importance
+varImp(model.qda)
+```
+ROC = 0.784. Test error is 0.2923, ROC is 0.7913 (train error is 1-0.7913=0.2087). Assumes that predictor variables are normally distributed  for "each level of the grouping variable"good" and "poor" quality of wine. The most important variables in predicting wine quality are alcohol, volatile acidity and sulphates.
+
+## SVM with linear kernal (caret)
+```{r}
+set.seed(1)
+
+svml.fit <- train(qual ~ . ,
+                  data = trainData,
+                  method = "svmLinear2",
+                  tuneGrid = data.frame(cost = exp(seq(-2,5,len = 20))),
+                  trControl = ctrl)
+plot(svml.fit, highlight = TRUE, xTrans = log)
+
+svml.fit$bestTune
+
+# Building confusion matrix
+test.pred.prob7 <- predict(svml.fit, newdata = testData,
+                           type = "prob")
+test.pred7 <- rep("good", length(test.pred.prob7$good))
+test.pred7[test.pred.prob7$good < 0.5] <- "poor"
+
+confusionMatrix(data = as.factor(test.pred7),
+                reference = testData$qual,
+                positive = "good")
+
+# Plot the test ROC
+roc.svml <- roc(testData$qual, test.pred.prob7$good)
+plot(roc.svml, legacy.axes = TRUE, print.auc = TRUE)
+plot(smooth(roc.svml), col = 4, add = TRUE)
+
+## Calculate the test error
+error.svml <- mean(testData$qual != test.pred7)
+
+
+## Calculate the train error rate
+
+
+# train error
+svml.fit
+
+# variable importance
+explainer_svm <- explain(svml.fit,
+                         abel = "svml",
+                         ata = trainData %>% dplyr::select(-qual),
+                         y = as.numeric(trainData$qual == "good"),  ### qual still in graph
+                         verbose = FALSE)
+# variable importance
+
+vi_svm <- model_parts(explainer_svm)
+plot(vi_svm)
+```
+We used SVM with linear kernaland we tuned over cost. We found that the model with maximized ROC had cost = 0.59078. AUC for this model is 0.816, accuracy is 0.7495 (test error is 0.2505) and ROC is 0.8148 (train error is 1-0.8148=0.1852). The most important variable for quality prediction is alcohol; volatile acidity and total sulfur dioxide are also relatively important variables.
+
+## SVM with radial kernal (caret)
+```{r}
+set.seed(1)
+
+svmr.grid <- expand.grid(C = exp(seq(-1,4,len=10)),
+                         sigma = exp(seq(-8,0,len=10)))
+
+svmr.fit <- train(qual ~ .,
+                  data = trainData,
+                  method = "svmRadialSigma",
+                  preProcess = c("center", "scale"),
+                  tuneGrid = svmr.grid,
+                  trControl = ctrl)
+plot(svmr.fit, highlight = TRUE)
+
+svmr.fit$bestTune
+
+# Building confusion matrix
+test.pred.prob8 <- predict(svmr.fit, newdata = testData,
+                           type = "prob")
+test.pred8 <- rep("good", length(test.pred.prob8$good))
+test.pred8[test.pred.prob8$good < 0.5] <- "poor"
+
+confusionMatrix(data = as.factor(test.pred8),
+                reference = testData$qual,
+                positive = "good")
+
+# Plot the test ROC
+roc.svmr <- roc(testData$qual, test.pred.prob8$good)
+plot(roc.svmr, legacy.axes = TRUE, print.auc = TRUE)
+plot(smooth(roc.svmr), col = 4, add = TRUE)
+
+## Calculate the test error
+error.svmr <- mean(testData$qual != test.pred8)
+
+
+## Calculate the train error rate
+
+# variable importance
+explainer_svmr <- explain(svmr.fit,
+                         abel = "svmr",
+                         ata = trainData %>% dplyr::select(-qual),
+                         y = as.numeric(trainData$qual == "good"),  ### qual still in graph
+                         verbose = FALSE)
+# variable importance
+
+vi_svmr <- model_parts(explainer_svmr)
+plot(vi_svmr)
+```
+When performing SVM with radial kernal, we tuned over both cost and sigma, and found that the model with maximized ROC had sigma = 0.06948 and cost = 1.94773. AUC for this model is 0.829, accuracy is 0.7474 (test error is 0.2526), and ROC is 0.8424 (train error is 1-0.8424=0.1576). Same as SVM using linear kernal, the most important variable for quality prediction is alcohol; sulphates and volatile acidity are the second and third most important variables.
